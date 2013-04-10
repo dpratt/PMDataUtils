@@ -8,16 +8,18 @@
 #import "NSManagedObject+PropertiesDictionary.h"
 #import "ISO8601DateFormatter.h"
 
+#import "PMDataUtils.h"
+
 @implementation NSManagedObject (PropertiesDictionary)
 
-- (BOOL)setValuesAndRelationshipsForKeysWithDictionary:(NSDictionary *)keyedValues {
+- (BOOL)setValuesAndRelationshipsForKeysWithDictionary:(NSDictionary *)keyedValues error:(NSError **)error {
     
     NSSet *inputKeys = [NSSet setWithArray:keyedValues.allKeys];
     
     @try {
         //set all the attributes on the managed object
         NSDictionary *attributes = [[self entity] attributesByName];
-        //iterate through the attribute names, not the names in the dictionary
+        //interate through the attribute names, not the names in the dictionary
         
         for (NSString *attribute in attributes) {
             //If the attribute name is not present in the input, don't change the value
@@ -37,8 +39,10 @@
                 value = [value stringValue];
             } else if ([value isKindOfClass:[NSString class]]) {
                 switch(attributeType) {
-                    case NSDateAttributeType:
-                        value = [[self dateFormat] dateFromString:value];
+                    case NSDateAttributeType: {
+                        ISO8601DateFormatter *formatter = [[ISO8601DateFormatter alloc] init];
+                        value = [formatter dateFromString:value];
+                    }
                         break;
                     case NSInteger16AttributeType:
                     case NSInteger32AttributeType:
@@ -56,7 +60,7 @@
                     default:
                         break;
                 }
-            }            
+            }
             //TODO: deal with NSTransformableAttributeType
             [self setValue:value forKey:attribute];
         }
@@ -68,19 +72,35 @@
                 //skip the attribute if it's not present in the input
                 continue;
             }
-
+            
             NSRelationshipDescription *relationship = [relationships valueForKey:relationshipName];
             id value = [keyedValues objectForKey:relationshipName];
-            
-            if ( !relationship.isOptional && (value == nil || value == [NSNull null])) {
-                //TODO: Should this throw an exception? For now, just skip the relationship
-                NSLog(@"ERROR - expected value for required relationship %@ in object %@, got nil.", relationshipName, [self.entity name]);
-                return NO;
+                        
+            //See if we can uniquely identify managed objects of the destination entity type inside of the context
+            //This allows us to re-use objects in the context (where appropriate)
+            NSString *destinationEntityUniqueIdPropertyName = nil;
+            Class childClass = NSClassFromString(relationship.destinationEntity.managedObjectClassName);
+            if([childClass respondsToSelector:@selector(uniqueIdentifierPropertyName)]) {
+                destinationEntityUniqueIdPropertyName = [childClass performSelector:@selector(uniqueIdentifierPropertyName)];
+                //ensure that the collectionIdName is an existing scalar attribute on the entity
+                if ([[relationship.destinationEntity attributesByName] objectForKey:destinationEntityUniqueIdPropertyName] == nil) {
+                    NSLog(@"Unique ID parameter set to %@ on entity %@, but is not an attribute.", destinationEntityUniqueIdPropertyName, [self.entity name]);
+                    destinationEntityUniqueIdPropertyName = nil;
+                }
             }
-
+            
+            
             if (!relationship.isToMany) {
+
                 //this is a 1-to-1 relationship
                 if (value == nil || value == [NSNull null]) {
+                    if ( !relationship.isOptional ) {
+                        *error = [NSError errorWithDomain:kPMDataUtilsErrorDomain
+                                                     code:kPMDataUtilsGeneral
+                                                 userInfo:@{NSLocalizedDescriptionKey : [NSString stringWithFormat:@"ERROR - expected value for required relationship %@ in object %@, got nil.", relationshipName, [self.entity name]]}];
+                        return NO;
+                    }
+
                     //null out the value - but ONLY if it's owned by this object
                     //if it's not a cascade delete, it's assumed that this is the
                     //child side of a bidirectional relationship
@@ -99,17 +119,52 @@
                               relationshipName, [self.entity name], NSStringFromClass([value class]));
                         return NO;
                     }
-                    NSDictionary *childValues = (NSDictionary *)value;
+                    NSDictionary *childDict = (NSDictionary *)value;
                     //get the current value (if any)
                     NSManagedObject *child = [self valueForKey:relationshipName];
                     if(child == nil) {
-                        //need to create a new value
-                        child = [[NSManagedObject alloc] initWithEntity:relationship.destinationEntity insertIntoManagedObjectContext:self.managedObjectContext];
+                        //we do not have an existing value
+                        
+                        //if the inverse relationship is a toMany it means that
+                        //this object has the ability to use an already existing object somewhere from the moc
+                        //attempt to look up an object somewhere in the moc that matches what we're looking for
+                        //we can only do this, though, if the child entity class defines a property name that is a 'primary key'
+                        if(relationship.inverseRelationship.isToMany && destinationEntityUniqueIdPropertyName != nil) {
+                            
+                            //the 'primary key' of the child object
+                            id childIdentifierValue = [childDict objectForKey:destinationEntityUniqueIdPropertyName];
+                            if(childIdentifierValue != nil) {
+                                NSFetchRequest *fetch = [[NSFetchRequest alloc] init];
+                                fetch.entity = relationship.destinationEntity;
+                                fetch.predicate = [NSPredicate predicateWithFormat:@"%K == %@", destinationEntityUniqueIdPropertyName, childIdentifierValue];
+                                NSError *fetchError = nil;
+                                NSArray *results = [self.managedObjectContext executeFetchRequest:fetch error:&fetchError];
+                                if(fetchError != nil) {
+                                    *error = fetchError;
+                                    return NO;
+                                }
+                                //                                if(results.count > 1) {
+                                //                                    NSLog(@"Found %i candidates for relationship %@ on entity %@ for identifier value %@. Using random object.",
+                                //                                          results.count, relationshipName, relationship.destinationEntity.name, childIdentifierValue);
+                                //                                }
+                                child = [results lastObject];
+                            } else {
+                                NSLog(@"The property %@ returned a nil value from the input NSDictionary. Cannot look up an existing object.", destinationEntityUniqueIdPropertyName);
+                            }
+                        }
                         if(child == nil) {
-                            NSLog(@"Could not allocate object of type %@", relationship.destinationEntity.name);
+                            //need to create a new value
+                            child = [[NSManagedObject alloc] initWithEntity:relationship.destinationEntity insertIntoManagedObjectContext:self.managedObjectContext];
+                            if(child == nil) {
+                                NSString *errorMessage = [NSString stringWithFormat:@"Could not allocate object of type %@", relationship.destinationEntity.name];
+                                *error = [NSError errorWithDomain:kPMDataUtilsErrorDomain
+                                                             code:kPMDataUtilsGeneral
+                                                         userInfo:@{NSLocalizedDescriptionKey : errorMessage}];
+                                return NO;
+                            }
                         }
                     }
-                    if(![child setValuesAndRelationshipsForKeysWithDictionary:childValues]) {
+                    if(![child setValuesAndRelationshipsForKeysWithDictionary:childDict error:error]) {
                         return NO;
                     }
                     [self setValue:child forKey:relationshipName];
@@ -117,6 +172,14 @@
             } else {
                 //handle a 1-to-many relationship
                 if (value == nil || value == [NSNull null]) {
+                    
+                    if ( !relationship.isOptional ) {
+                        *error = [NSError errorWithDomain:kPMDataUtilsErrorDomain
+                                                     code:kPMDataUtilsGeneral
+                                                 userInfo:@{NSLocalizedDescriptionKey : [NSString stringWithFormat:@"ERROR - expected value for required relationship %@ in object %@, got nil.", relationshipName, [self.entity name]]}];
+                        return NO;
+                    }
+                    
                     NSMutableSet *existingChildren = [self mutableSetValueForKey:relationshipName];
                     if(relationship.deleteRule == NSCascadeDeleteRule) {
                         //since it's a cascade delete, we can assume that this object 'owns' it's children so delete them
@@ -130,43 +193,42 @@
                     //this is a 1-to-many relationship
                     //a 1-to-many relationship must be described by an NSArray element in the input
                     if (![value isKindOfClass:[NSArray class]]) {
-                        NSLog(@"Expecting NSArray value for relationship named %@ in object %@, but got %@ instead.",
-                              relationshipName, [self.entity name], NSStringFromClass([value class]));
+                        NSString *errorMessage = [NSString stringWithFormat:@"Expecting NSArray value for relationship named %@ in object %@, but got %@ instead.",
+                                                  relationshipName, [self.entity name], NSStringFromClass([value class])];
+                        *error = [NSError errorWithDomain:kPMDataUtilsErrorDomain
+                                                     code:kPMDataUtilsGeneral
+                                                 userInfo:@{NSLocalizedDescriptionKey : errorMessage}];
                         return NO;
                     }
                     NSArray *inputValues = (NSArray *)value;
+                    
+                    if ( !relationship.isOptional && inputValues.count == 0) {
+                        *error = [NSError errorWithDomain:kPMDataUtilsErrorDomain
+                                                     code:kPMDataUtilsGeneral
+                                                 userInfo:@{NSLocalizedDescriptionKey : [NSString stringWithFormat:@"ERROR - expected value for required relationship %@ in object %@, got nil.", relationshipName, [self.entity name]]}];
+                        return NO;
+                    }
+
+                    
                     //we expect all of the child values to be NSDictionaries
                     for(id inputChild in inputValues) {
                         if (![inputChild isKindOfClass:[NSDictionary class]]) {
-                            NSLog(@"Expecting NSDictionary child for relationship %@ in object %@, but got %@ instead.",
-                                  relationshipName, [self.entity name], NSStringFromClass([inputChild class]));
-                        }
-                    }
-                    
-                    BOOL isManyToMany = relationship.isToMany && relationship.inverseRelationship.isToMany;
-
-                    //To to this 'right', we need a way to uniquely identify an object at a given time in both
-                    //the core data set and in the input JSON.
-                    //If we can uniquely identify an object in a collection we will update it
-                    //if we cannot identify the object, we remove and optionally delete it from the collection.
-                    NSString *collectionIdName = nil;
-                    Class childClass = NSClassFromString(relationship.destinationEntity.managedObjectClassName);
-                    if([childClass respondsToSelector:@selector(objectIdentifierPropertyName)]) {
-                        collectionIdName = [childClass performSelector:@selector(objectIdentifierPropertyName)];
-                        //ensure that the collectionIdName is a scalar attribute on the entity - not a relationship
-                        if ([[relationship.destinationEntity attributesByName] objectForKey:collectionIdName] == nil) {
-                            NSLog(@"Collection ID parameter set to %@ on entity %@, but is not an attribute.", collectionIdName, [self.entity name]);
+                            NSString *errorMessage = [NSString stringWithFormat:@"Expecting NSDictionary child for relationship %@ in object %@, but got %@ instead.",
+                                                      relationshipName, [self.entity name], NSStringFromClass([inputChild class])];
+                            *error = [NSError errorWithDomain:kPMDataUtilsErrorDomain
+                                                         code:kPMDataUtilsGeneral
+                                                     userInfo:@{NSLocalizedDescriptionKey : errorMessage}];
                             return NO;
                         }
                     }
                     
-                    if(collectionIdName != nil) {
-//                        DLog(@"Using collection ID property %@ for relationship %@", collectionIdName, relationshipName);
-                        //we can uiqniely ID things!
+                    BOOL isManyToMany = relationship.isToMany && relationship.inverseRelationship.isToMany;
+                    
+                    if(destinationEntityUniqueIdPropertyName != nil) {
                         
                         //create the lookup maps and sets of keys
                         //check to see if there is more than one value with the defined ID key
-                        NSArray *allInputIds = [inputValues valueForKey:collectionIdName];
+                        NSArray *allInputIds = [inputValues valueForKey:destinationEntityUniqueIdPropertyName];
                         NSCountedSet *uniqueInputKeys = [NSCountedSet setWithArray:allInputIds];
                         if(uniqueInputKeys.count != allInputIds.count) {
                             //this means that there is more than one object in the input
@@ -176,15 +238,15 @@
                             NSSet *duplicateIds = [uniqueInputKeys objectsPassingTest:^BOOL(id obj, BOOL *stop) {
                                 return [uniqueInputKeys countForObject:obj] > 1;
                             }];
-                            NSLog(@"WARNING! The JSON input used to set the values in relationship %@ on entity %@ contains mutiple values for the supposedly unique key %@. This will cause undefined behavior on the target NSManagedObject. (The likeliest result is that one of the inputs is completely ignored.) Keys with non-unique occurences - %@", relationshipName, self.entity.name, collectionIdName, duplicateIds);
+                            NSLog(@"WARNING! The JSON input used to set the values in relationship %@ on entity %@ contains mutiple values for the supposedly unique key %@. This will cause undefined behavior on the target NSManagedObject. (The likeliest result is that one of the inputs is completely ignored.) Keys with non-unique occurences - %@", relationshipName, self.entity.name, destinationEntityUniqueIdPropertyName, duplicateIds);
                         }
-
+                        
                         //have to get orderedExisting because the existing is an NSSet
                         //basically, just turn the set into an array so that we can then
                         //transform it into a dictionary with the key being the value of the ID property
                         //and the value being the value itself
                         NSArray *ordereredExisting = [[self valueForKeyPath:relationshipName] allObjects];
-                        NSArray *orderedExistingKeys = [ordereredExisting valueForKey:collectionIdName];
+                        NSArray *orderedExistingKeys = [ordereredExisting valueForKey:destinationEntityUniqueIdPropertyName];
                         NSCountedSet *uniqueExistingKeys = [NSCountedSet setWithArray:orderedExistingKeys];
                         if(uniqueExistingKeys.count != orderedExistingKeys.count) {
                             //this means that there is more than one object in the existing set of children
@@ -194,16 +256,16 @@
                             NSSet *duplicateIds = [uniqueExistingKeys objectsPassingTest:^BOOL(id obj, BOOL *stop) {
                                 return [uniqueExistingKeys countForObject:obj] > 1;
                             }];
-                            NSLog(@"WARNING! The existing values in relationship %@ on entity %@ contains mutiple values for the supposedly unique key %@. This will cause undefined behavior on the target NSManagedObject. (The likeliest result is that one of the inputs is completely ignored.) Keys with non-unique occurences - %@", relationshipName, self.entity.name, collectionIdName, duplicateIds);
+                            NSLog(@"WARNING! The existing values in relationship %@ on entity %@ contains mutiple values for the supposedly unique key %@. This will cause undefined behavior on the target NSManagedObject. (The likeliest result is that one of the inputs is completely ignored.) Keys with non-unique occurences - %@", relationshipName, self.entity.name, destinationEntityUniqueIdPropertyName, duplicateIds);
                         }
                         
                         NSDictionary *existingById = [NSDictionary dictionaryWithObjects:ordereredExisting forKeys:orderedExistingKeys];
-                                                
+                        
                         NSMutableArray *newValues = [NSMutableArray arrayWithCapacity:inputValues.count];
                         //now iterate through the input and set the values
                         for(NSDictionary *inputValue in inputValues) {
-                            id inputIdentifierPropertyVal = [inputValue objectForKey:collectionIdName];
                             NSManagedObject *child = nil;
+                            id inputIdentifierPropertyVal = [inputValue objectForKey:destinationEntityUniqueIdPropertyName];
                             if (inputIdentifierPropertyVal == nil) {
                                 NSLog(@"Could not get identifier property from child object - assuming that the object is an insert.");
                                 NSLog(@"Note - this may or may not cause leaks in your object graph.");
@@ -211,42 +273,40 @@
                                 child = [existingById objectForKey:inputIdentifierPropertyVal];
                             }
                             if(child == nil) {
-//                                DLog(@"No existing object for property %@ with value %@ for relationship %@", collectionIdName, inputIdentifierPropertyVal, relationshipName);
-                                //we need to insert the object, or if this is a many/many, see if there is another object
-                                //somewhere else that we can add to the relationship
+                                
+                                //if this is a many/many relationship, we can re-use an existing object in the context
+                                //in this collection (if present)
                                 if (isManyToMany && inputIdentifierPropertyVal != nil) {
                                     //try and find it in the context - it may exist
                                     NSFetchRequest *fetch = [[NSFetchRequest alloc] init];
                                     fetch.entity = relationship.destinationEntity;
-                                    fetch.predicate = [NSPredicate predicateWithFormat:@"%K == %@", collectionIdName, inputIdentifierPropertyVal];
-                                    NSError *error = nil;
-                                    NSArray *results = [self.managedObjectContext executeFetchRequest:fetch error:&error];
-                                    if (error != nil) {
-                                        //something went wrong
-                                        //TODO: Should we just move on and create a new one?
-                                        //Going to bail out for now
-                                        NSLog(@"Error running fetch - %@", [error localizedDescription]);
+                                    fetch.predicate = [NSPredicate predicateWithFormat:@"%K == %@", destinationEntityUniqueIdPropertyName, inputIdentifierPropertyVal];
+                                    NSArray *results = [self.managedObjectContext executeFetchRequest:fetch error:error];
+                                    if (*error != nil) {
                                         return NO;
                                     }
                                     if (results.count > 1) {
-//                                        DLog(@"More than one object returned for entity named %@ with attribute %@ valued %@. Selecting random object.", relationship.destinationEntity.name, collectionIdName, inputIdentifierPropertyVal);
+                                        //                                        DLog(@"More than one object returned for entity named %@ with attribute %@ valued %@. Selecting random object.", relationship.destinationEntity.name, collectionIdName, inputIdentifierPropertyVal);
                                     }
                                     child = [results lastObject];
                                 }
                                 if (child == nil) {
-//                                    DLog(@"Creating new instance of %@ for relationship %@", relationship.destinationEntity.name, relationshipName);
+                                    //                                    DLog(@"Creating new instance of %@ for relationship %@", relationship.destinationEntity.name, relationshipName);
                                     //just create a new object
                                     child = [[NSManagedObject alloc] initWithEntity:relationship.destinationEntity insertIntoManagedObjectContext:self.managedObjectContext];
                                     if(child == nil) {
-                                        NSLog(@"Could not allocate object of type %@", relationship.destinationEntity.name);
+                                        NSString *errorMessage = [NSString stringWithFormat:@"Could not allocate object of type %@", relationship.destinationEntity.name];
+                                        *error = [NSError errorWithDomain:kPMDataUtilsErrorDomain
+                                                                     code:kPMDataUtilsGeneral
+                                                                 userInfo:@{NSLocalizedDescriptionKey : errorMessage}];
                                         return NO;
                                     }
                                 }
                             } else {
-//                                DLog(@"Found existing object for relationship %@", relationshipName);
+                                //                                DLog(@"Found existing object for relationship %@", relationshipName);
                             }
                             //okay - update the child with the properties from the dictionary, and associate it to the relationship
-                            if(![child setValuesAndRelationshipsForKeysWithDictionary:inputValue]) {
+                            if(![child setValuesAndRelationshipsForKeysWithDictionary:inputValue error:error]) {
                                 return NO;
                             }
                             [newValues addObject:child];
@@ -258,7 +318,7 @@
                             //only delete if this object 'owns' the children
                             NSMutableSet *existingObjectIds = [NSMutableSet setWithArray:[ordereredExisting valueForKeyPath:@"objectID"]];
                             [existingObjectIds minusSet:[NSSet setWithArray:[newValues valueForKeyPath:@"objectID"]]];
-//                            DLog(@"Deleting %i orphaned objects of type %@.", existingObjectIds.count, relationship.destinationEntity.name);
+                            //                            DLog(@"Deleting %i orphaned objects of type %@.", existingObjectIds.count, relationship.destinationEntity.name);
                             for(NSManagedObjectID *objectId in existingObjectIds) {
                                 NSManagedObject *obj = [self.managedObjectContext objectWithID:objectId];
                                 [self.managedObjectContext deleteObject:obj];
@@ -273,7 +333,7 @@
                         }
                         
                     } else {
-//                        DLog(@"Can't identify collection for relationship %@ - just recreating.", relationshipName);
+                        //                        DLog(@"Can't identify collection for relationship %@ - just recreating.", relationshipName);
                         id existingChildren = nil;
                         if(relationship.isOrdered) {
                             existingChildren = [self mutableOrderedSetValueForKeyPath:relationshipName];
@@ -295,7 +355,7 @@
                             if(newChild == nil) {
                                 NSLog(@"Could not allocate object of type %@", relationship.destinationEntity.name);
                             }
-                            if(![newChild setValuesAndRelationshipsForKeysWithDictionary:inputChild]) {
+                            if(![newChild setValuesAndRelationshipsForKeysWithDictionary:inputChild error:error]) {
                                 return NO;
                             }
                             [existingChildren addObject:newChild];
@@ -310,16 +370,6 @@
         return NO;
     }
     return YES;
-}
-
-- (ISO8601DateFormatter *)dateFormat {
-    static ISO8601DateFormatter *_dateFormat = nil;
-    static dispatch_once_t oncePredicate;
-    dispatch_once(&oncePredicate, ^{
-        _dateFormat = [[ISO8601DateFormatter alloc] init];
-    });
-
-    return _dateFormat;
 }
 
 @end

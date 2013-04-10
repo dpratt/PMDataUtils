@@ -24,9 +24,9 @@
 //CSGarbageCollectedManagedObject for an example of how to do this.
 //
 //This method also knows how to do updates to an existing 1 to many collection. If the destination entity's companion Objective-C
-//class object responds to the selector 'objectIdentifierPropertyName', the resulting NSString is used as the name of a property
-//in the managed object that uniquely identifies it in a collection. For example, if you have a 1 to many collection of
-//Manager -> Employees, the Employee class may respond to 'objectIdentifierPropertyName' by returning the string 'employeeId'.
+//class object responds to the selector 'uniqueIdentifierPropertyName', the resulting NSString is used as the name of a property
+//in the managed object that uniquely identifies it in the managed object context. For example, if you have a 1 to many collection of
+//Manager -> Employees, the Employee class may respond to 'uniqueIdentifierPropertyName' by returning the string 'employeeId'.
 //This property is then accessed on all of the children in the collection and the corresponding values from the input NSDictionary
 //are used to correlate objects in the NSDictionary to existing values. If there is a match, the existing object is used.
 //If an object with a given ID exists in the NSDictionary but not in the current value of the relationship, a new object
@@ -35,6 +35,6 @@
 //to 'Cascade').
 //NOTE - it is assumed that the value associated with the designated object ID property actually will be unique
 //in the collection. If it is not, undefined behavior can (and will) occur.
-- (BOOL)setValuesAndRelationshipsForKeysWithDictionary:(NSDictionary *)keyedValues;
+- (BOOL)setValuesAndRelationshipsForKeysWithDictionary:(NSDictionary *)keyedValues error:(NSError **)error;
 
 @end

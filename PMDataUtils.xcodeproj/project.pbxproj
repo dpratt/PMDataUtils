@@ -18,6 +18,7 @@
 		B1A522C417113D15001DACC8 /* PMDataUtilsTests.m in Sources */ = {isa = PBXBuildFile; fileRef = B1A522C317113D15001DACC8 /* PMDataUtilsTests.m */; };
 		B1A522D117113D6F001DACC8 /* PMGarbageCollectedManagedObject.m in Sources */ = {isa = PBXBuildFile; fileRef = B1A522CE17113D6F001DACC8 /* PMGarbageCollectedManagedObject.m */; };
 		B1A522D217113D6F001DACC8 /* NSManagedObject+PropertiesDictionary.m in Sources */ = {isa = PBXBuildFile; fileRef = B1A522D017113D6F001DACC8 /* NSManagedObject+PropertiesDictionary.m */; };
+		B1CE23091715EA36006B4B9F /* PMDataUtils.m in Sources */ = {isa = PBXBuildFile; fileRef = B1CE23081715EA36006B4B9F /* PMDataUtils.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,6 +61,8 @@
 		B1A522CE17113D6F001DACC8 /* PMGarbageCollectedManagedObject.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = PMGarbageCollectedManagedObject.m; sourceTree = "<group>"; };
 		B1A522CF17113D6F001DACC8 /* NSManagedObject+PropertiesDictionary.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSManagedObject+PropertiesDictionary.h"; sourceTree = "<group>"; };
 		B1A522D017113D6F001DACC8 /* NSManagedObject+PropertiesDictionary.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSManagedObject+PropertiesDictionary.m"; sourceTree = "<group>"; };
+		B1CE23071715EA36006B4B9F /* PMDataUtils.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = PMDataUtils.h; sourceTree = "<group>"; };
+		B1CE23081715EA36006B4B9F /* PMDataUtils.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = PMDataUtils.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -123,6 +126,8 @@
 				B1A522D017113D6F001DACC8 /* NSManagedObject+PropertiesDictionary.m */,
 				B10431FF2EC37E699EECEE8F /* ISO8601DateFormatter.h */,
 				B10436AA760D7E3F535A73B2 /* ISO8601DateFormatter.m */,
+				B1CE23071715EA36006B4B9F /* PMDataUtils.h */,
+				B1CE23081715EA36006B4B9F /* PMDataUtils.m */,
 				B1A522A817113D15001DACC8 /* Supporting Files */,
 			);
 			path = PMDataUtils;
@@ -256,6 +261,7 @@
 				B1A522D117113D6F001DACC8 /* PMGarbageCollectedManagedObject.m in Sources */,
 				B1A522D217113D6F001DACC8 /* NSManagedObject+PropertiesDictionary.m in Sources */,
 				B1043012BDCEDB83A62A7385 /* ISO8601DateFormatter.m in Sources */,
+				B1CE23091715EA36006B4B9F /* PMDataUtils.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

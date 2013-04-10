@@ -38,18 +38,15 @@ extern unichar ISO8601DefaultTimeSeparatorCharacter;
 {
 	NSString *lastUsedFormatString;
 	NSDateFormatter *unparsingFormatter;
-
+    
 	NSCalendar *parsingCalendar, *unparsingCalendar;
-
+    
 	NSTimeZone *defaultTimeZone;
 	ISO8601DateFormat format;
 	unichar timeSeparator;
 	BOOL includeTime;
 	BOOL parsesStrictly;
 }
-
-//Call this if you get a memory warning.
-+ (void) purgeGlobalCaches;
 
 @property(nonatomic, retain) NSTimeZone *defaultTimeZone;
 
