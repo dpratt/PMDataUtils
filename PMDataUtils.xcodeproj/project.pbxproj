@@ -8,7 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		B1043012BDCEDB83A62A7385 /* ISO8601DateFormatter.m in Sources */ = {isa = PBXBuildFile; fileRef = B10436AA760D7E3F535A73B2 /* ISO8601DateFormatter.m */; settings = {COMPILER_FLAGS = "-fno-objc-arc"; }; };
-		B1043F97BFCDDD664FFA734A /* ISO8601DateFormatter.h in CopyFiles */ = {isa = PBXBuildFile; fileRef = B10431FF2EC37E699EECEE8F /* ISO8601DateFormatter.h */; };
+		B145DA83179EE1D600CF270E /* PMGarbageCollectedManagedObject.h in Headers */ = {isa = PBXBuildFile; fileRef = B1A522CD17113D6F001DACC8 /* PMGarbageCollectedManagedObject.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		B145DA84179EE1D600CF270E /* NSManagedObject+PropertiesDictionary.h in Headers */ = {isa = PBXBuildFile; fileRef = B1A522CF17113D6F001DACC8 /* NSManagedObject+PropertiesDictionary.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		B145DA85179EE1D600CF270E /* PMDataUtils.h in Headers */ = {isa = PBXBuildFile; fileRef = B1CE23071715EA36006B4B9F /* PMDataUtils.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		B1A522A617113D15001DACC8 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B1A522A517113D15001DACC8 /* Foundation.framework */; };
 		B1A522B517113D15001DACC8 /* SenTestingKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B1A522B417113D15001DACC8 /* SenTestingKit.framework */; };
 		B1A522B717113D15001DACC8 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B1A522B617113D15001DACC8 /* UIKit.framework */; };
@@ -38,7 +40,6 @@
 			dstPath = "include/${PRODUCT_NAME}";
 			dstSubfolderSpec = 16;
 			files = (
-				B1043F97BFCDDD664FFA734A /* ISO8601DateFormatter.h in CopyFiles */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -162,6 +163,19 @@
 		};
 /* End PBXGroup section */
 
+/* Begin PBXHeadersBuildPhase section */
+		B145DA82179EE1C900CF270E /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B145DA83179EE1D600CF270E /* PMGarbageCollectedManagedObject.h in Headers */,
+				B145DA84179EE1D600CF270E /* NSManagedObject+PropertiesDictionary.h in Headers */,
+				B145DA85179EE1D600CF270E /* PMDataUtils.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
 /* Begin PBXNativeTarget section */
 		B1A522A117113D15001DACC8 /* PMDataUtils */ = {
 			isa = PBXNativeTarget;
@@ -170,6 +184,7 @@
 				B1A5229E17113D15001DACC8 /* Sources */,
 				B1A5229F17113D15001DACC8 /* Frameworks */,
 				B1A522A017113D15001DACC8 /* CopyFiles */,
+				B145DA82179EE1C900CF270E /* Headers */,
 			);
 			buildRules = (
 			);
@@ -354,8 +369,8 @@
 				DSTROOT = /tmp/PMDataUtils.dst;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "PMDataUtils/PMDataUtils-Prefix.pch";
-				OTHER_LDFLAGS = "-ObjC";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PUBLIC_HEADERS_FOLDER_PATH = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 			};
 			name = Debug;
@@ -366,8 +381,8 @@
 				DSTROOT = /tmp/PMDataUtils.dst;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "PMDataUtils/PMDataUtils-Prefix.pch";
-				OTHER_LDFLAGS = "-ObjC";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PUBLIC_HEADERS_FOLDER_PATH = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 			};
 			name = Release;
